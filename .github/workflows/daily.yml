@@ -1,0 +1,39 @@
+name: Daily MaxEnt-IRL Run
+
+on:
+  schedule:
+    # 00:30 UTC Monday–Saturday
+    - cron: '30 23 * * 1-6'
+  workflow_dispatch:
+
+jobs:
+  run-maxent-irl:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          
+      - name: Run MaxEnt-IRL Engine
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python trainer.py
+          
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maxent-irl-results
+          path: |
+            maxent_irl_*.json
+            maxent_irl_breakdown_*.json
