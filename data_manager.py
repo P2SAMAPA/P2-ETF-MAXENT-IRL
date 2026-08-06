@@ -19,8 +19,16 @@ import config
 
 logger = logging.getLogger(__name__)
 
+# ── Column classification ─────────────────────────────────────────────────────
+
+# Long history — safe to dropna on these
 MACRO_COLS_CORE = ["VIX", "T10Y2Y", "DXY"]
+
+# Variable / shorter history — ffill then zero-fill, never dropna
 MACRO_COLS_EXTENDED = ["IG_SPREAD", "HY_SPREAD"]
+
+# All macro col names (for checking availability)
+MACRO_COLS_ALL = MACRO_COLS_CORE + MACRO_COLS_EXTENDED
 
 
 def _all_tickers() -> List[str]:
@@ -84,6 +92,7 @@ def load_master_data(hf_token: Optional[str] = None) -> Tuple[pd.DataFrame, pd.D
     df = df.sort_index()
     df.index.name = "Date"
 
+    # ── ETF price columns ─────────────────────────────────────────────────────
     all_tickers = _all_tickers()
     avail_tickers = [t for t in all_tickers if t in df.columns]
     missing_tick = [t for t in all_tickers if t not in df.columns]
@@ -97,6 +106,7 @@ def load_master_data(hf_token: Optional[str] = None) -> Tuple[pd.DataFrame, pd.D
     prices = prices.ffill()
     prices = prices.dropna(how="all")
 
+    # ── Macro columns ─────────────────────────────────────────────────────────
     avail_core = [c for c in MACRO_COLS_CORE if c in df.columns]
     avail_ext = [c for c in MACRO_COLS_EXTENDED if c in df.columns]
     avail_all = avail_core + avail_ext
@@ -109,6 +119,7 @@ def load_master_data(hf_token: Optional[str] = None) -> Tuple[pd.DataFrame, pd.D
 
     macro = df[avail_all].copy()
 
+    # Core: safe dropna on long-history columns only
     if avail_core:
         before = len(macro)
         macro = macro.dropna(subset=avail_core)
@@ -116,9 +127,11 @@ def load_master_data(hf_token: Optional[str] = None) -> Tuple[pd.DataFrame, pd.D
         if dropped:
             logger.info(f"Dropped {dropped} rows with NaN in core macro cols.")
 
+    # Extended: forward-fill then zero-fill (variable history)
     if avail_ext:
         macro[avail_ext] = macro[avail_ext].ffill().fillna(0.0)
 
+    # ── Align on common DatetimeIndex ─────────────────────────────────────────
     common = prices.index.intersection(macro.index)
     if len(common) == 0:
         raise RuntimeError("No overlapping dates between price and macro data.")
